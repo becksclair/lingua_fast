@@ -6,11 +6,13 @@ pub struct Config {
     pub bind_addr: String,
     #[arg(long = "MODEL_PATH", env = "MODEL_PATH")]
     pub model_path: String,
-    #[arg(long, env, default_value_t = 4096)]
+    // Must be >= 1 to satisfy NonZeroU32 context requirement
+    #[arg(long, env, default_value_t = 4096, value_parser = clap::value_parser!(i32).range(1..))]
     pub n_ctx: i32,
     #[arg(long, env, default_value_t = 256)]
     pub n_batch: i32,
-    #[arg(long, env, default_value_t = 28)]
+    // Disallow negatives; 0 means CPU-only inference
+    #[arg(long, env, default_value_t = 28, value_parser = clap::value_parser!(i32).range(0..))]
     pub n_gpu_layers: i32,
     #[arg(long, env, default_value_t = 1024)]
     pub max_tokens: i32,
