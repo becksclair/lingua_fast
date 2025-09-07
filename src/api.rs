@@ -138,7 +138,12 @@ pub fn routes<B: LlmBackend + Clone + 'static>(
 
                 // Concurrency with order preservation
                 let mut set = tokio::task::JoinSet::new();
-                let concurrency_limit = usize::min(8, num_cpus::get());
+                // Allow overriding batch concurrency via INFER_CONCURRENCY to avoid GPU thrash
+                let concurrency_limit = std::env::var("INFER_CONCURRENCY")
+                    .ok()
+                    .and_then(|s| s.parse::<usize>().ok())
+                    .filter(|&v| v > 0)
+                    .unwrap_or_else(|| usize::min(8, num_cpus::get()));
                 for (idx, word) in req.words.iter().cloned().enumerate() {
                     let backend = backend.clone();
                     let validator = validator.clone();

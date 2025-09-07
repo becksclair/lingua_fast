@@ -14,6 +14,12 @@ pub struct Config {
     // Disallow negatives; 0 means CPU-only inference
     #[arg(long, env, default_value_t = 28, value_parser = clap::value_parser!(i32).range(0..))]
     pub n_gpu_layers: i32,
+    // 0 means auto-detect (use all available logical CPUs)
+    #[arg(long, env = "THREADS", default_value_t = 0, value_parser = clap::value_parser!(i32).range(0..))]
+    pub threads: i32,
+    // 0 means default (min(8, num_cpus)) per-process inference concurrency
+    #[arg(long = "INFER_CONCURRENCY", env = "INFER_CONCURRENCY", default_value_t = 0, value_parser = clap::value_parser!(i32).range(0..))]
+    pub infer_concurrency: i32,
     #[arg(long, env, default_value_t = 1024)]
     pub max_tokens: i32,
     #[arg(long, env, default_value_t = 0.4)]

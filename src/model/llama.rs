@@ -17,7 +17,8 @@ pub struct Inner {
     backend: LLBackend,
     model: LlamaModel,
     n_ctx: i32,
-    _n_batch: i32,
+    n_batch: i32,
+    threads: i32,
     limiter: Arc<Semaphore>,
 }
 
@@ -27,7 +28,14 @@ pub struct LlamaBackend {
 }
 
 impl LlamaBackend {
-    pub fn new(model_path: PathBuf, n_ctx: i32, n_batch: i32, n_gpu_layers: i32) -> Result<Self> {
+    pub fn new(
+        model_path: PathBuf,
+        n_ctx: i32,
+        n_batch: i32,
+        n_gpu_layers: i32,
+        threads: i32,
+        infer_concurrency: i32,
+    ) -> Result<Self> {
         tracing::info!("Initializing LlamaBackend with model_path={:?}, n_ctx={}, n_batch={}, n_gpu_layers={}",
                       model_path, n_ctx, n_batch, n_gpu_layers);
 
@@ -48,14 +56,19 @@ impl LlamaBackend {
             .context("load GGUF model")?;
         tracing::info!("Model loaded successfully");
 
-        let permits = usize::min(8, usize::max(1, num_cpus::get()));
+        let permits = if infer_concurrency > 0 {
+            usize::max(1, infer_concurrency as usize)
+        } else {
+            usize::min(8, usize::max(1, num_cpus::get()))
+        };
 
         Ok(Self {
             inner: Arc::new(Inner {
                 backend,
                 model,
                 n_ctx,
-                _n_batch: n_batch,
+                n_batch,
+                threads,
                 limiter: Arc::new(Semaphore::new(permits)),
             }),
         })
@@ -102,12 +115,17 @@ impl LlmBackend for LlamaBackend {
             .await
             .expect("semaphore not closed");
 
+        let threads = if self.inner.threads > 0 {
+            self.inner.threads as i32
+        } else {
+            num_cpus::get() as i32
+        };
         tracing::debug!("Creating context with n_ctx={}, n_threads={}",
-                       self.inner.n_ctx, num_cpus::get());
+                       self.inner.n_ctx, threads);
         let ctx_params = LlamaContextParams::default()
             .with_n_ctx(Some(NonZeroU32::new(self.inner.n_ctx as u32).unwrap()))
-            .with_n_threads(num_cpus::get() as i32)
-            .with_n_threads_batch(num_cpus::get() as i32);
+            .with_n_threads(threads)
+            .with_n_threads_batch(threads);
         let mut ctx = self
             .inner
             .model
@@ -137,7 +155,7 @@ impl LlmBackend for LlamaBackend {
         }
 
         tracing::debug!("Creating batch and decoding prompt...");
-        let mut batch = LlamaBatch::new(2048, 1);
+        let mut batch = LlamaBatch::new(self.inner.n_batch as usize, 1);
         let last_index: i32 = (tokens_list.len() - 1) as i32;
         for (i, token) in (0_i32..).zip(tokens_list.into_iter()) {
             let is_last = i == last_index;

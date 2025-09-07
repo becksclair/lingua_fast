@@ -31,6 +31,8 @@ async fn main() -> anyhow::Result<()> {
         cfg.n_ctx,
         cfg.n_batch,
         cfg.n_gpu_layers,
+        cfg.threads,
+        cfg.infer_concurrency,
     )?;
 
     let params = InferParams {

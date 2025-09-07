@@ -8,4 +8,4 @@ CMAKE_GENERATOR = "Ninja"
 CMAKE_ROOT = "/opt/homebrew/share/cmake"
 
 # Uncomment to force Metal on Apple Silicon if your toolchain supports it
-# LLAMA_METAL = "1"
+LLAMA_METAL = "1"

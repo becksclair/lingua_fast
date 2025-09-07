@@ -123,4 +123,4 @@ Batch responses include per-item status to handle partial failures gracefully.
 - Batch processing uses controlled concurrency (max 8 parallel requests)
 - GBNF grammar constrains LLM output structure, JSON Schema validates results
 - The service loads schema at startup from embedded `schema/word_contract.schema.json`
-- Default model path for tests: `./models/granite/granite-3.3-2b-instruct-Q4_K_M.gguf`
+- Default model path for tests: `./models/granite/granite-3.3-8b-instruct-Q4_K_M.gguf`
