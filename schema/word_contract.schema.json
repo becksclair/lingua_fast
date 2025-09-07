@@ -1,0 +1,151 @@
+{
+	"properties": {
+		"word": {
+			"type": "string",
+			"minLength": 1
+		},
+		"baseForm": {
+			"type": "string",
+			"minLength": 1
+		},
+		"phonetic": {
+			"type": "string",
+			"minLength": 1
+		},
+		"difficulty": {
+			"type": "string",
+			"enum": [
+				"beginner",
+				"intermediate",
+				"advanced"
+			]
+		},
+		"language": {
+			"type": "string",
+			"enum": [
+				"english"
+			]
+		},
+		"meanings": {
+			"type": "array",
+			"minItems": 1,
+			"maxItems": 4,
+			"items": {
+				"type": "object",
+				"additionalProperties": false,
+				"properties": {
+					"definition": {
+						"type": "string",
+						"minLength": 30,
+						"maxLength": 480
+					},
+					"partOfSpeech": {
+						"type": "string",
+						"enum": [
+							"noun",
+							"verb",
+							"adjective",
+							"adverb",
+							"pronoun",
+							"preposition",
+							"conjunction",
+							"interjection",
+							"article",
+							"determiner",
+							"numeral",
+							"participle",
+							"gerund"
+						]
+					},
+					"exampleSentence": {
+						"type": "string",
+						"maxLength": 200
+					},
+					"grammarTip": {
+						"type": "string",
+						"maxLength": 160
+					},
+					"synonyms": {
+						"type": "array",
+						"items": {
+							"type": "string",
+							"minLength": 1
+						},
+						"minItems": 0,
+						"maxItems": 8
+					},
+					"antonyms": {
+						"type": "array",
+						"items": {
+							"type": "string",
+							"minLength": 1
+						},
+						"minItems": 0,
+						"maxItems": 6
+					},
+					"translations": {
+						"type": "object",
+						"additionalProperties": false,
+						"properties": {
+							"es": {
+								"type": "string"
+							},
+							"fr": {
+								"type": "string"
+							},
+							"de": {
+								"type": "string"
+							},
+							"zh": {
+								"type": "string"
+							},
+							"ja": {
+								"type": "string"
+							},
+							"it": {
+								"type": "string"
+							},
+							"pt": {
+								"type": "string"
+							},
+							"ru": {
+								"type": "string"
+							},
+							"ar": {
+								"type": "string"
+							}
+						},
+						"required": [
+							"es",
+							"fr",
+							"de",
+							"zh",
+							"ja",
+							"it",
+							"pt",
+							"ru",
+							"ar"
+						]
+					}
+				},
+				"required": [
+					"definition",
+					"partOfSpeech",
+					"exampleSentence",
+					"grammarTip",
+					"synonyms",
+					"antonyms",
+					"translations"
+				]
+			}
+		}
+	},
+	"required": [
+		"word",
+		"baseForm",
+		"phonetic",
+		"difficulty",
+		"language",
+		"meanings"
+	]
+}
