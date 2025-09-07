@@ -117,7 +117,8 @@ async fn single_word_backend_error() {
         .unwrap();
 
     let res: Response = app.oneshot(req).await.unwrap();
-    assert_eq!(res.status(), http::StatusCode::INTERNAL_SERVER_ERROR);
+    // Backend inference failures are treated as temporary and mapped to 503
+    assert_eq!(res.status(), http::StatusCode::SERVICE_UNAVAILABLE);
 }
 
 #[tokio::test]

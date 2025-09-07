@@ -116,7 +116,7 @@ impl LlmBackend for LlamaBackend {
             .expect("semaphore not closed");
 
         let threads = if self.inner.threads > 0 {
-            self.inner.threads as i32
+            self.inner.threads
         } else {
             num_cpus::get() as i32
         };
@@ -159,7 +159,7 @@ impl LlmBackend for LlamaBackend {
         let last_index: i32 = (tokens_list.len() - 1) as i32;
         for (i, token) in (0_i32..).zip(tokens_list.into_iter()) {
             let is_last = i == last_index;
-            batch.add(token, i, &[0], is_last)
+            batch.add(token, i, [0_i32].as_slice(), is_last)
                 .with_context(|| format!("failed to add token {} to batch at position {}", token, i))?;
         }
         ctx.decode(&mut batch)
@@ -210,7 +210,7 @@ impl LlmBackend for LlamaBackend {
 
             // Prepare for next iteration
             batch.clear();
-            batch.add(token, n_cur, &[0], true)
+            batch.add(token, n_cur, [0_i32].as_slice(), true)
                 .with_context(|| format!("failed to add generated token {} to batch", token))?;
             n_cur += 1;
             ctx.decode(&mut batch)

@@ -29,39 +29,39 @@ pub struct ErrorResponse {
 
 #[derive(Debug, Clone)]
 enum ApiErrorType {
-    ValidationError(String),
-    InferenceError(String),
-    JsonParseError(String),
-    InternalError(String),
+    Validation(String),
+    Inference(String),
+    JsonParse(String),
+    Internal(String),
 }
 
 impl ApiErrorType {
     fn should_retry(&self) -> bool {
-        matches!(self, Self::InferenceError(_) | Self::InternalError(_))
+        matches!(self, Self::Inference(_) | Self::Internal(_))
     }
-    
+
     fn status_code(&self) -> StatusCode {
         match self {
-            Self::ValidationError(_) => StatusCode::UNPROCESSABLE_ENTITY,
-            Self::JsonParseError(_) => StatusCode::UNPROCESSABLE_ENTITY,
-            Self::InferenceError(_) => StatusCode::SERVICE_UNAVAILABLE,
-            Self::InternalError(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            Self::Validation(_) => StatusCode::UNPROCESSABLE_ENTITY,
+            Self::JsonParse(_) => StatusCode::UNPROCESSABLE_ENTITY,
+            Self::Inference(_) => StatusCode::SERVICE_UNAVAILABLE,
+            Self::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
-    
+
     fn error_type_str(&self) -> &'static str {
         match self {
-            Self::ValidationError(_) => "validation_error",
-            Self::JsonParseError(_) => "json_parse_error",
-            Self::InferenceError(_) => "inference_error",
-            Self::InternalError(_) => "internal_error",
+            Self::Validation(_) => "validation_error",
+            Self::JsonParse(_) => "json_parse_error",
+            Self::Inference(_) => "inference_error",
+            Self::Internal(_) => "internal_error",
         }
     }
-    
+
     fn message(&self) -> &str {
         match self {
-            Self::ValidationError(msg) | Self::JsonParseError(msg) | 
-            Self::InferenceError(msg) | Self::InternalError(msg) => msg,
+            Self::Validation(msg) | Self::JsonParse(msg) |
+            Self::Inference(msg) | Self::Internal(msg) => msg,
         }
     }
 }
@@ -85,7 +85,7 @@ pub fn routes<B: LlmBackend + Clone + 'static>(
             let params = params_single.clone();
             async move {
                 info!("Processing single word request: {}", req.word);
-                
+
                 // Input validation
                 if req.word.trim().is_empty() {
                     let error_response = ErrorResponse {
@@ -96,7 +96,7 @@ pub fn routes<B: LlmBackend + Clone + 'static>(
                     };
                     return (StatusCode::BAD_REQUEST, Json(error_response)).into_response();
                 }
-                
+
                 if req.word.len() > 100 {
                     let error_response = ErrorResponse {
                         error: "Word too long (max 100 characters)".to_string(),
@@ -106,10 +106,10 @@ pub fn routes<B: LlmBackend + Clone + 'static>(
                     };
                     return (StatusCode::BAD_REQUEST, Json(error_response)).into_response();
                 }
-                
+
                 // Attempt inference with retry logic
                 let result = attempt_word_inference(backend, validator, params, &req.word).await;
-                
+
                 match result {
                     Ok(json_value) => {
                         info!("Successfully processed word: {}", req.word);
@@ -263,22 +263,22 @@ async fn attempt_word_inference<B: LlmBackend>(
 ) -> Result<Value, ApiErrorType> {
     const MAX_RETRIES: usize = 2;
     const RETRY_DELAY: Duration = Duration::from_millis(500);
-    
+
     let system = "You are an expert linguist and lexicographer. Produce a single valid JSON object only.".to_string();
-    let prompt = PromptParts { 
-        system, 
-        user_word: word.to_string() 
+    let prompt = PromptParts {
+        system,
+        user_word: word.to_string()
     };
-    
+
     for attempt in 0..=MAX_RETRIES {
         debug!("Inference attempt {} for word: {}", attempt + 1, word);
-        
+
         let inference_result = async {
             let bytes = backend.infer_json(prompt.clone(), &params).await
                 .context("LLM inference failed")?;
             Ok::<Vec<u8>, anyhow::Error>(bytes)
         }.await;
-        
+
         let bytes = match inference_result {
             Ok(bytes) => bytes,
             Err(e) => {
@@ -287,12 +287,12 @@ async fn attempt_word_inference<B: LlmBackend>(
                     tokio::time::sleep(RETRY_DELAY).await;
                     continue;
                 }
-                return Err(ApiErrorType::InferenceError(
+                return Err(ApiErrorType::Inference(
                     format!("LLM inference failed after {} attempts: {}", MAX_RETRIES + 1, e)
                 ));
             }
         };
-        
+
         // Parse JSON
         let json_value = match serde_json::from_slice::<Value>(&bytes) {
             Ok(v) => v,
@@ -302,12 +302,12 @@ async fn attempt_word_inference<B: LlmBackend>(
                     tokio::time::sleep(RETRY_DELAY).await;
                     continue;
                 }
-                return Err(ApiErrorType::JsonParseError(
+                return Err(ApiErrorType::JsonParse(
                     format!("Failed to parse JSON response: {}", e)
                 ));
             }
         };
-        
+
         // Validate and fix
         match validator.validate_and_fix(json_value, word) {
             Ok(validated) => {
@@ -317,24 +317,24 @@ async fn attempt_word_inference<B: LlmBackend>(
             Err(e) => {
                 // Check if it's a validation error we shouldn't retry
                 let error_msg = e.to_string();
-                if error_msg.contains("Missing required field") || 
+                if error_msg.contains("Missing required field") ||
                    error_msg.contains("Invalid value") ||
                    error_msg.contains("duplicate partOfSpeech") {
                     warn!("Validation failed for '{}': {}", word, e);
-                    return Err(ApiErrorType::ValidationError(error_msg));
+                    return Err(ApiErrorType::Validation(error_msg));
                 }
-                
+
                 warn!("Validation attempt {} failed for '{}': {}", attempt + 1, word, e);
                 if attempt < MAX_RETRIES {
                     tokio::time::sleep(RETRY_DELAY).await;
                     continue;
                 }
-                return Err(ApiErrorType::ValidationError(
+                return Err(ApiErrorType::Validation(
                     format!("Validation failed after {} attempts: {}", MAX_RETRIES + 1, e)
                 ));
             }
         }
     }
-    
-    Err(ApiErrorType::InternalError("Unexpected end of retry loop".to_string()))
+
+    Err(ApiErrorType::Internal("Unexpected end of retry loop".to_string()))
 }
