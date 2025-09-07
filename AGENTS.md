@@ -24,6 +24,7 @@
 - Unit tests: co-locate with modules using `#[cfg(test)]` in `src/*.rs`.
 - Integration tests: create `tests/` and use `cargo test` to run all tests.
 - Prefer integration tests; the project only works if tests pass with real LLM inference, never mock anything.
+- Always verify tests by running `cargo test`
 
 ## Commit & Pull Request Guidelines
 - Commits: concise, imperative subject (e.g., `add validator for synonyms dedupe`). Group related changes.

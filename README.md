@@ -40,6 +40,21 @@ curl -s http://127.0.0.1:8080/v1/word -X POST \
 -d '{"word":"communicated"}' | jq
 ```
 
+### Batch Request
+```bash
+curl -s http://127.0.0.1:8080/v1/words -X POST \
+-H 'content-type: application/json' \
+-d '{"words":["communicated","run","magnificent"]}' | jq
+```
+
+Batch responses return per-item status objects to avoid failing the whole batch on a single error:
+
+[
+  { "word": "communicated", "ok": true,  "data": { ... word JSON ... } },
+  { "word": "badword",     "ok": false, "error": "validation or inference error" },
+  { "word": "run",          "ok": true,  "data": { ... } }
+]
+
 
 ## Load test
 ```bash
@@ -62,8 +77,7 @@ cargo run -p xtask --release -- http://127.0.0.1:8080/v1/word
 - Add per-model KV cache warming for the system prompt.
 
 ## Features
-- By default, the build uses the real llama.cpp backend via the `llama-cpp-2` crate.
-- A `mock-llama` feature exists only for local development convenience if you want to skip compiling llama.cpp, but it is not enabled by default.
+- The build always uses the real llama.cpp backend via the `llama-cpp-2` crate.
 
 ### Run (real inference)
 ```bash
@@ -74,10 +88,12 @@ cargo run --release -- \
 ```
 
 ### Tests (real inference)
-An integration test runs real inference when `MODEL_PATH` is set and otherwise skips.
+Tests always run real inference using a default model path. Override with `MODEL_PATH`.
+Default: `./models/granite/granite-3.3-2b-instruct-Q4_K_M.gguf`
 ```bash
+# optional
 export MODEL_PATH=/path/to/model.gguf
-cargo test --test inference_llama -- --nocapture
+cargo test -- --nocapture
 ```
 
 If you previously built with Ninja as the CMake generator, you may need a clean build to switch to Makefiles:

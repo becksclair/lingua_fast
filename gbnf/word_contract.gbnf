@@ -9,14 +9,13 @@ object ::= "{" ws members ws "}"
 members ::= pair (ws "," ws pair)*
 
 
-pair ::= (
+pair ::= 
 "\"word\"" ws ":" ws string_nonempty |
 "\"baseForm\"" ws ":" ws string_lower |
 "\"phonetic\"" ws ":" ws ipa_string |
 "\"difficulty\"" ws ":" ws ("\"beginner\""|"\"intermediate\""|"\"advanced\"") |
 "\"language\"" ws ":" ws "\"english\"" |
 "\"meanings\"" ws ":" ws meanings
-)
 
 
 meanings ::= "[" ws (sense (ws "," ws sense){0,3})? ws "]"
@@ -24,7 +23,7 @@ sense ::= "{" ws sense_members ws "}"
 sense_members ::= sense_pair (ws "," ws sense_pair){6}
 
 
-sense_pair ::= (
+sense_pair ::= 
 "\"definition\"" ws ":" ws string_30_480 |
 "\"partOfSpeech\"" ws ":" ws pos |
 "\"exampleSentence\"" ws ":" ws string_max200 |
@@ -32,7 +31,6 @@ sense_pair ::= (
 "\"synonyms\"" ws ":" ws string_array_0_8 |
 "\"antonyms\"" ws ":" ws string_array_0_6 |
 "\"translations\"" ws ":" ws translations
-)
 
 
 pos ::= "\"noun\""|"\"verb\""|"\"adjective\""|"\"adverb\""|"\"pronoun\""|"\"preposition\""|"\"conjunction\""|"\"interjection\""|"\"article\""|"\"determiner\""|"\"numeral\""|"\"participle\""|"\"gerund\""
@@ -56,7 +54,7 @@ string_lower ::= "\"" lower_char+ "\""
 
 
 string_char ::= escape | ~["\\]
-lower_char ::= [a-z0-9 /.,;:'!?()_-] | escape
+lower_char ::= [-a-z0-9 /.,;:'!?()_] | escape
 escape ::= "\\" ["\\/bfnrt]
 
 

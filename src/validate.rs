@@ -62,3 +62,70 @@ impl Validator {
         Ok(v)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn base_json() -> Value {
+        serde_json::json!({
+            "word": "ignored",
+            "baseForm": "ignore",
+            "phonetic": "ɪgˈnɔːd",
+            "difficulty": "beginner",
+            "language": "english",
+            "meanings": [
+                {
+                    "partOfSpeech": "noun",
+                    "definition": "This is a sufficiently long definition string for schema.",
+                    "exampleSentence": "An example sentence that is valid.",
+                    "grammarTip": "A short grammar tip.",
+                    "synonyms": ["Alpha", "alpha", "BETA"],
+                    "antonyms": ["Opposite", "opposite"],
+                    "translations": {
+                        "es": "x", "fr": "x", "de": "x", "zh": "x", "ja": "x",
+                        "it": "x", "pt": "x", "ru": "x", "ar": "x"
+                    }
+                }
+            ]
+        })
+    }
+
+    #[test]
+    fn sets_surface_word_and_dedupes() {
+        let v = base_json();
+        let out = Validator::new("")
+            .unwrap()
+            .validate_and_fix(v, "Surface")
+            .unwrap();
+        assert_eq!(out["word"], "Surface");
+        let syn = out["meanings"][0]["synonyms"].as_array().unwrap();
+        assert_eq!(
+            syn,
+            &vec![Value::String("alpha".into()), Value::String("beta".into())]
+        );
+        let ant = out["meanings"][0]["antonyms"].as_array().unwrap();
+        assert_eq!(ant, &vec![Value::String("opposite".into())]);
+    }
+
+    #[test]
+    fn duplicate_pos_errors() {
+        let mut v = base_json();
+        if let Some(arr) = v.get_mut("meanings").and_then(|m| m.as_array_mut()) {
+            arr.push(serde_json::json!({
+                "partOfSpeech": "noun",
+                "definition": "Another sufficiently long definition string for schema validity.",
+                "exampleSentence": "Another example.",
+                "grammarTip": "Another tip.",
+                "synonyms": [],
+                "antonyms": [],
+                "translations": {
+                    "es": "x", "fr": "x", "de": "x", "zh": "x", "ja": "x",
+                    "it": "x", "pt": "x", "ru": "x", "ar": "x"
+                }
+            }));
+        }
+        let res = Validator::new("").unwrap().validate_and_fix(v, "Surface");
+        assert!(res.is_err(), "expected error on duplicate partOfSpeech");
+    }
+}
