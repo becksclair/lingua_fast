@@ -1,0 +1,3 @@
+root ::= ws "{" ws "\"word\"" ws ":" ws string ws "," ws "\"meanings\"" ws ":" ws "[" ws "]" ws "}"
+ws ::= [ \t\n\r]*
+string ::= "\"" [^"]* "\""

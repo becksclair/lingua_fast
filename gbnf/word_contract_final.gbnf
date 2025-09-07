@@ -1,0 +1,5 @@
+root ::= object
+object ::= "{" ws "\"word\"" ws ":" ws string ws "," ws "\"meanings\"" ws ":" ws array ws "}"
+array ::= "[" ws "]"
+string ::= "\"" [^"]* "\""
+ws ::= [ \t\n\r]*

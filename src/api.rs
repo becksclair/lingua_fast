@@ -2,20 +2,68 @@ use crate::{
     model::{InferParams, LlmBackend, PromptParts},
     validate::Validator,
 };
-use anyhow::Result;
+use anyhow::{Context, Result};
 use axum::{http::StatusCode, response::IntoResponse, routing::post, Json, Router};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
+use tracing::{debug, error, info, warn};
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct WordReq {
     pub word: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct BatchReq {
     pub words: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ErrorResponse {
+    pub error: String,
+    pub error_type: String,
+    pub word: Option<String>,
+    pub retry_suggested: bool,
+}
+
+#[derive(Debug, Clone)]
+enum ApiErrorType {
+    ValidationError(String),
+    InferenceError(String),
+    JsonParseError(String),
+    InternalError(String),
+}
+
+impl ApiErrorType {
+    fn should_retry(&self) -> bool {
+        matches!(self, Self::InferenceError(_) | Self::InternalError(_))
+    }
+    
+    fn status_code(&self) -> StatusCode {
+        match self {
+            Self::ValidationError(_) => StatusCode::UNPROCESSABLE_ENTITY,
+            Self::JsonParseError(_) => StatusCode::UNPROCESSABLE_ENTITY,
+            Self::InferenceError(_) => StatusCode::SERVICE_UNAVAILABLE,
+            Self::InternalError(_) => StatusCode::INTERNAL_SERVER_ERROR,
+        }
+    }
+    
+    fn error_type_str(&self) -> &'static str {
+        match self {
+            Self::ValidationError(_) => "validation_error",
+            Self::JsonParseError(_) => "json_parse_error",
+            Self::InferenceError(_) => "inference_error",
+            Self::InternalError(_) => "internal_error",
+        }
+    }
+    
+    fn message(&self) -> &str {
+        match self {
+            Self::ValidationError(msg) | Self::JsonParseError(msg) | 
+            Self::InferenceError(msg) | Self::InternalError(msg) => msg,
+        }
+    }
 }
 
 pub fn routes<B: LlmBackend + Clone + 'static>(
@@ -32,24 +80,53 @@ pub fn routes<B: LlmBackend + Clone + 'static>(
 
     Router::new()
         .route("/v1/word", post(move |Json(req): Json<WordReq>| {
-let backend = backend_single.clone();
-let validator = validator_single.clone();
-let params = params_single.clone();
- async move {
-let system = "You are an expert linguist and lexicographer. Produce a single valid JSON object only.".to_string();
-let prompt = PromptParts { system, user_word: req.word.clone() };
-// First attempt
-let result: Result<Json<Value>, anyhow::Error> = async {
-    let bytes = backend.infer_json(prompt, &params).await?;
-    let v: Value = serde_json::from_slice(&bytes)?;
-    let v = validator.validate_and_fix(v, &req.word)?;
-    Ok(Json(v))
-}.await;
-match result {
-    Ok(json) => json.into_response(),
-    Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
-}
-}
+            let backend = backend_single.clone();
+            let validator = validator_single.clone();
+            let params = params_single.clone();
+            async move {
+                info!("Processing single word request: {}", req.word);
+                
+                // Input validation
+                if req.word.trim().is_empty() {
+                    let error_response = ErrorResponse {
+                        error: "Word cannot be empty".to_string(),
+                        error_type: "validation_error".to_string(),
+                        word: Some(req.word.clone()),
+                        retry_suggested: false,
+                    };
+                    return (StatusCode::BAD_REQUEST, Json(error_response)).into_response();
+                }
+                
+                if req.word.len() > 100 {
+                    let error_response = ErrorResponse {
+                        error: "Word too long (max 100 characters)".to_string(),
+                        error_type: "validation_error".to_string(),
+                        word: Some(req.word.clone()),
+                        retry_suggested: false,
+                    };
+                    return (StatusCode::BAD_REQUEST, Json(error_response)).into_response();
+                }
+                
+                // Attempt inference with retry logic
+                let result = attempt_word_inference(backend, validator, params, &req.word).await;
+                
+                match result {
+                    Ok(json_value) => {
+                        info!("Successfully processed word: {}", req.word);
+                        Json(json_value).into_response()
+                    }
+                    Err(api_error) => {
+                        error!("Failed to process word '{}': {}", req.word, api_error.message());
+                        let error_response = ErrorResponse {
+                            error: api_error.message().to_string(),
+                            error_type: api_error.error_type_str().to_string(),
+                            word: Some(req.word.clone()),
+                            retry_suggested: api_error.should_retry(),
+                        };
+                        (api_error.status_code(), Json(error_response)).into_response()
+                    }
+                }
+            }
         }))
         .route("/v1/words", post(move |Json(req): Json<BatchReq>| {
             let backend = backend_batch.clone();
@@ -67,16 +144,8 @@ match result {
                     let validator = validator.clone();
                     let params = params.clone();
                     set.spawn(async move {
-                        let system = "You are an expert linguist and lexicographer. Produce a single valid JSON object only.".to_string();
-                        let prompt = PromptParts { system, user_word: word.clone() };
-                        let result: anyhow::Result<Value> = async {
-                            let bytes = backend.infer_json(prompt, &params).await?;
-                            let v: Value = serde_json::from_slice(&bytes)?;
-                            let v = validator.validate_and_fix(v, &word)?;
-                            Ok(v)
-                        }
-                        .await;
-                        Ok::<(usize, anyhow::Result<Value>), anyhow::Error>((idx, result))
+                        let result = attempt_word_inference(backend.clone(), validator.clone(), params.clone(), &word).await;
+                        Ok::<(usize, Result<Value, ApiErrorType>), anyhow::Error>((idx, result))
                     });
 
                     // Backpressure to cap concurrency
@@ -92,11 +161,13 @@ match result {
                                                 "data": v,
                                             }));
                                         }
-                                        Err(e) => {
+                                        Err(api_error) => {
                                             results[idx] = Some(json!({
                                                 "word": req.words[idx].clone(),
                                                 "ok": false,
-                                                "error": e.to_string(),
+                                                "error": api_error.message(),
+                                                "error_type": api_error.error_type_str(),
+                                                "retry_suggested": api_error.should_retry(),
                                             }));
                                         }
                                     }
@@ -135,11 +206,13 @@ match result {
                                         "data": v,
                                     }));
                                 }
-                                Err(e) => {
+                                Err(api_error) => {
                                     results[idx] = Some(json!({
                                         "word": req.words[idx].clone(),
                                         "ok": false,
-                                        "error": e.to_string(),
+                                        "error": api_error.message(),
+                                        "error_type": api_error.error_type_str(),
+                                        "retry_suggested": api_error.should_retry(),
                                     }));
                                 }
                             }
@@ -174,4 +247,89 @@ match result {
                 Json(out).into_response()
             }
         }))
+}
+
+/// Attempt word inference with retry logic and enhanced error handling
+async fn attempt_word_inference<B: LlmBackend>(
+    backend: B,
+    validator: Arc<Validator>,
+    params: InferParams,
+    word: &str,
+) -> Result<Value, ApiErrorType> {
+    const MAX_RETRIES: usize = 2;
+    const RETRY_DELAY: Duration = Duration::from_millis(500);
+    
+    let system = "You are an expert linguist and lexicographer. Produce a single valid JSON object only.".to_string();
+    let prompt = PromptParts { 
+        system, 
+        user_word: word.to_string() 
+    };
+    
+    for attempt in 0..=MAX_RETRIES {
+        debug!("Inference attempt {} for word: {}", attempt + 1, word);
+        
+        let inference_result = async {
+            let bytes = backend.infer_json(prompt.clone(), &params).await
+                .context("LLM inference failed")?;
+            Ok::<Vec<u8>, anyhow::Error>(bytes)
+        }.await;
+        
+        let bytes = match inference_result {
+            Ok(bytes) => bytes,
+            Err(e) => {
+                warn!("Inference attempt {} failed for '{}': {}", attempt + 1, word, e);
+                if attempt < MAX_RETRIES {
+                    tokio::time::sleep(RETRY_DELAY).await;
+                    continue;
+                }
+                return Err(ApiErrorType::InferenceError(
+                    format!("LLM inference failed after {} attempts: {}", MAX_RETRIES + 1, e)
+                ));
+            }
+        };
+        
+        // Parse JSON
+        let json_value = match serde_json::from_slice::<Value>(&bytes) {
+            Ok(v) => v,
+            Err(e) => {
+                warn!("JSON parsing failed for '{}' on attempt {}: {}", word, attempt + 1, e);
+                if attempt < MAX_RETRIES {
+                    tokio::time::sleep(RETRY_DELAY).await;
+                    continue;
+                }
+                return Err(ApiErrorType::JsonParseError(
+                    format!("Failed to parse JSON response: {}", e)
+                ));
+            }
+        };
+        
+        // Validate and fix
+        match validator.validate_and_fix(json_value, word) {
+            Ok(validated) => {
+                debug!("Successfully processed '{}' on attempt {}", word, attempt + 1);
+                return Ok(validated);
+            }
+            Err(e) => {
+                // Check if it's a validation error we shouldn't retry
+                let error_msg = e.to_string();
+                if error_msg.contains("Missing required field") || 
+                   error_msg.contains("Invalid value") ||
+                   error_msg.contains("duplicate partOfSpeech") {
+                    warn!("Validation failed for '{}': {}", word, e);
+                    return Err(ApiErrorType::ValidationError(error_msg));
+                }
+                
+                warn!("Validation attempt {} failed for '{}': {}", attempt + 1, word, e);
+                if attempt < MAX_RETRIES {
+                    tokio::time::sleep(RETRY_DELAY).await;
+                    continue;
+                }
+                return Err(ApiErrorType::ValidationError(
+                    format!("Validation failed after {} attempts: {}", MAX_RETRIES + 1, e)
+                ));
+            }
+        }
+    }
+    
+    Err(ApiErrorType::InternalError("Unexpected end of retry loop".to_string()))
 }

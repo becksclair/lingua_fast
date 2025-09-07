@@ -29,7 +29,7 @@ jsonschema = { version = "0.18", default-features = false, features = [
 async-trait = "0.1"
 # llama.cpp Rust bindings (optional; enable with feature `llama`)
 # We use the high-level safe wrappers from `llama-cpp-2` to keep wiring simple.
-llama-cpp-2 = { version = "0.1", optional = true, default-features = false }
+llama-cpp-2 = { version = "0.1.121", optional = true, default-features = false }
 # time & metrics
 hdrhistogram                = "7"
 metrics                     = "0.22"

@@ -1,71 +1,19 @@
-# Grammar to produce exactly one JSON object for the linguistics spec.
-# Arrays may be empty; all required keys present; values are strings unless otherwise specified.
-# Some semantic rules (like unique partOfSpeech) are enforced post-parse in Rust.
-
-
 root ::= object
 ws ::= [ \t\n\r]*
-object ::= "{" ws members ws "}"
-members ::= pair (ws "," ws pair)*
 
+object ::= "{" ws "\"word\"" ws ":" ws string ws "," ws "\"baseForm\"" ws ":" ws string ws "," ws "\"phonetic\"" ws ":" ws string ws "," ws "\"difficulty\"" ws ":" ws difficulty ws "," ws "\"language\"" ws ":" ws "\"english\"" ws "," ws "\"meanings\"" ws ":" ws meanings ws "}"
 
-pair ::= 
-"\"word\"" ws ":" ws string_nonempty |
-"\"baseForm\"" ws ":" ws string_lower |
-"\"phonetic\"" ws ":" ws ipa_string |
-"\"difficulty\"" ws ":" ws ("\"beginner\""|"\"intermediate\""|"\"advanced\"") |
-"\"language\"" ws ":" ws "\"english\"" |
-"\"meanings\"" ws ":" ws meanings
+difficulty ::= "\"beginner\"" | "\"intermediate\"" | "\"advanced\""
 
+meanings ::= "[" ws (meaning (ws "," ws meaning)*)? ws "]"
 
-meanings ::= "[" ws (sense (ws "," ws sense){0,3})? ws "]"
-sense ::= "{" ws sense_members ws "}"
-sense_members ::= sense_pair (ws "," ws sense_pair){6}
+meaning ::= "{" ws "\"definition\"" ws ":" ws string ws "," ws "\"partOfSpeech\"" ws ":" ws pos ws "," ws "\"exampleSentence\"" ws ":" ws string ws "," ws "\"grammarTip\"" ws ":" ws string ws "," ws "\"synonyms\"" ws ":" ws array ws "," ws "\"antonyms\"" ws ":" ws array ws "," ws "\"translations\"" ws ":" ws translations ws "}"
 
+pos ::= "\"noun\"" | "\"verb\"" | "\"adjective\"" | "\"adverb\"" | "\"pronoun\"" | "\"preposition\"" | "\"conjunction\"" | "\"interjection\"" | "\"article\"" | "\"determiner\"" | "\"numeral\"" | "\"participle\"" | "\"gerund\""
 
-sense_pair ::= 
-"\"definition\"" ws ":" ws string_30_480 |
-"\"partOfSpeech\"" ws ":" ws pos |
-"\"exampleSentence\"" ws ":" ws string_max200 |
-"\"grammarTip\"" ws ":" ws string_max160 |
-"\"synonyms\"" ws ":" ws string_array_0_8 |
-"\"antonyms\"" ws ":" ws string_array_0_6 |
-"\"translations\"" ws ":" ws translations
+translations ::= "{" ws "\"es\"" ws ":" ws string ws "," ws "\"fr\"" ws ":" ws string ws "," ws "\"de\"" ws ":" ws string ws "," ws "\"zh\"" ws ":" ws string ws "," ws "\"ja\"" ws ":" ws string ws "," ws "\"it\"" ws ":" ws string ws "," ws "\"pt\"" ws ":" ws string ws "," ws "\"ru\"" ws ":" ws string ws "," ws "\"ar\"" ws ":" ws string ws "}"
 
+array ::= "[" ws (string (ws "," ws string)*)? ws "]"
 
-pos ::= "\"noun\""|"\"verb\""|"\"adjective\""|"\"adverb\""|"\"pronoun\""|"\"preposition\""|"\"conjunction\""|"\"interjection\""|"\"article\""|"\"determiner\""|"\"numeral\""|"\"participle\""|"\"gerund\""
-
-
-translations ::= "{" ws
-"\"es\"" ws ":" ws string_nonempty ws "," ws
-"\"fr\"" ws ":" ws string_nonempty ws "," ws
-"\"de\"" ws ":" ws string_nonempty ws "," ws
-"\"zh\"" ws ":" ws string_nonempty ws "," ws
-"\"ja\"" ws ":" ws string_nonempty ws "," ws
-"\"it\"" ws ":" ws string_nonempty ws "," ws
-"\"pt\"" ws ":" ws string_nonempty ws "," ws
-"\"ru\"" ws ":" ws string_nonempty ws "," ws
-"\"ar\"" ws ":" ws string_nonempty
-ws "}"
-
-
-string_nonempty ::= "\"" string_char+ "\""
-string_lower ::= "\"" lower_char+ "\""
-
-
-string_char ::= escape | ~["\\]
-lower_char ::= [-a-z0-9 /.,;:'!?()_] | escape
-escape ::= "\\" ["\\/bfnrt]
-
-
-ipa_string ::= "\"/" ipa_char+ "/\""
-ipa_char ::= escape | ~["\\/]
-
-
-string_max200 ::= "\"" (~["\\] | escape){0,200} "\""
-string_max160 ::= "\"" (~["\\] | escape){0,160} "\""
-string_30_480 ::= "\"" (~["\\] | escape){30,480} "\""
-
-
-string_array_0_8 ::= "[" ws (string_nonempty (ws "," ws string_nonempty){0,7})? ws "]"
-string_array_0_6 ::= "[" ws (string_nonempty (ws "," ws string_nonempty){0,5})? ws "]"
+string ::= "\"" char* "\""
+char ::= [^"\\] | "\\" ["\\/bfnrt] | "\\u" [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F]
