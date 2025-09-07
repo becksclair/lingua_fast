@@ -1,17 +1,24 @@
-use axum::{http::StatusCode, response::IntoResponse, routing::post, Json, Router};
-use std::sync::Arc;
-use serde::Deserialize;
-use crate::{model::{LlmBackend, InferParams, PromptParts}, validate::Validator};
+use crate::{
+    model::{InferParams, LlmBackend, PromptParts},
+    validate::Validator,
+};
 use anyhow::Result;
+use axum::{http::StatusCode, response::IntoResponse, routing::post, Json, Router};
+use serde::Deserialize;
 use serde_json::Value;
-
+use std::sync::Arc;
 
 #[derive(Deserialize)]
-pub struct WordReq { pub word: String }
+pub struct WordReq {
+    pub word: String,
+}
 
-
-pub fn routes<B: LlmBackend + Clone + 'static>(backend: B, validator: Arc<Validator>, params: InferParams) -> Router {
-Router::new().route("/v1/word", post(move |Json(req): Json<WordReq>| {
+pub fn routes<B: LlmBackend + Clone + 'static>(
+    backend: B,
+    validator: Arc<Validator>,
+    params: InferParams,
+) -> Router {
+    Router::new().route("/v1/word", post(move |Json(req): Json<WordReq>| {
 let backend = backend.clone();
 let validator = validator.clone();
 let params = params.clone();

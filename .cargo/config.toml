@@ -1,0 +1,11 @@
+[env]
+# Use Ninja so cmake crate's CMAKE_DEFAULT_BUILD_TYPE define is accepted
+# (Unix Makefiles rejects that variable in this environment)
+CMAKE_GENERATOR = "Ninja"
+
+# Homebrew on Apple Silicon installs CMake under /opt/homebrew
+# Ensure CMake can find its Modules tree
+CMAKE_ROOT = "/opt/homebrew/share/cmake"
+
+# Uncomment to force Metal on Apple Silicon if your toolchain supports it
+# LLAMA_METAL = "1"

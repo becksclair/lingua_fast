@@ -62,5 +62,25 @@ cargo run -p xtask --release -- http://127.0.0.1:8080/v1/word
 - Add per-model KV cache warming for the system prompt.
 
 ## Features
-- By default, the build uses a lightweight mock backend that returns schema-valid JSON without calling llama.cpp. This keeps builds fast and CI-friendly.
-- To enable the real llama.cpp backend, wire up `llama_cpp_sys` and implement the `llama` feature in `src/model/llama.rs` (currently a placeholder).
+- By default, the build uses the real llama.cpp backend via the `llama-cpp-2` crate.
+- A `mock-llama` feature exists only for local development convenience if you want to skip compiling llama.cpp, but it is not enabled by default.
+
+### Run (real inference)
+```bash
+cargo run --release -- \
+  --bind-addr 0.0.0.0:8080 \
+  --MODEL_PATH "$MODEL_PATH" \
+  --n-ctx 4096 --n-batch 256 --n-gpu-layers 28
+```
+
+### Tests (real inference)
+An integration test runs real inference when `MODEL_PATH` is set and otherwise skips.
+```bash
+export MODEL_PATH=/path/to/model.gguf
+cargo test --test inference_llama -- --nocapture
+```
+
+If you previously built with Ninja as the CMake generator, you may need a clean build to switch to Makefiles:
+```bash
+cargo clean && cargo build
+```
