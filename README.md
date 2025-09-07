@@ -1,10 +1,13 @@
 # lingua-fast
 
-Axum service that generates linguistics JSON via llama.cpp with GBNF-constrained decoding and JSON Schema validation.
+🚀 **Fast linguistics API powered by llama.cpp**
 
+Analyze words and get structured linguistic data through a high-performance Rust service. Uses GBNF-constrained generation and JSON Schema validation to ensure reliable, structured responses.
 
-## Build llama.cpp
+## Quick Start
 
+### 1. Prerequisites
+You'll need a GGUF model file (like Granite 3.3B) and llama.cpp built with acceleration:
 
 **macOS (Apple Silicon):**
 ```bash
@@ -12,91 +15,98 @@ brew install cmake
 cmake -B build -S vendor/llama.cpp -DLLAMA_METAL=1
 cmake --build build -j
 ```
-Set `LLAMA_METAL=1` env when using a crate that links it, or ensure bindings can find the dynamic lib.
 
-
-**Linux:**
+**Linux with NVIDIA GPU:**
 ```bash
-cmake -B build -S vendor/llama.cpp -DLLAMA_CUBLAS=1 # if NVIDIA
+cmake -B build -S vendor/llama.cpp -DLLAMA_CUBLAS=1
 cmake --build build -j
 ```
 
-
-## Run service
+### 2. Configure and Run
 ```bash
+# Copy config template and set your model path
 cp .env.example .env
-# edit MODEL_PATH to your Granite GGUF
-cargo run --release -- \
---bind-addr 0.0.0.0:8080 \
---MODEL_PATH "$MODEL_PATH" \
---n-ctx 4096 --n-batch 256 --n-gpu-layers 28
+# Edit MODEL_PATH in .env to point to your GGUF file
+
+# Start the service
+cargo run --release
 ```
 
-
-### Request
+### 3. Try it out
+**Analyze a single word:**
 ```bash
-curl -s http://127.0.0.1:8080/v1/word -X POST \
--H 'content-type: application/json' \
--d '{"word":"communicated"}' | jq
+curl -X POST http://127.0.0.1:8080/v1/word \
+  -H 'content-type: application/json' \
+  -d '{"word":"beautiful"}' | jq
 ```
 
-### Batch Request
+**Batch processing:**
 ```bash
-curl -s http://127.0.0.1:8080/v1/words -X POST \
--H 'content-type: application/json' \
--d '{"words":["communicated","run","magnificent"]}' | jq
+curl -X POST http://127.0.0.1:8080/v1/words \
+  -H 'content-type: application/json' \
+  -d '{"words":["happy","running","analysis"]}' | jq
 ```
 
-Batch responses return per-item status objects to avoid failing the whole batch on a single error:
+## Features
 
+✨ **Fast & Reliable**
+- Concurrent batch processing (up to 8 parallel requests)
+- GBNF grammar constraints ensure valid JSON structure
+- JSON Schema validation for data quality
+- Built-in error handling and graceful degradation
+
+🔧 **Production Ready**
+- Configurable via environment variables or CLI
+- Built-in load testing tools
+- Optimized for GPU acceleration
+- Real inference testing (no mocks)
+
+## API Response Format
+
+Single word responses return linguistic analysis directly. Batch responses include per-item status to handle partial failures:
+
+```json
 [
-  { "word": "communicated", "ok": true,  "data": { ... word JSON ... } },
-  { "word": "badword",     "ok": false, "error": "validation or inference error" },
-  { "word": "run",          "ok": true,  "data": { ... } }
+  { "word": "beautiful", "ok": true, "data": { ... linguistic analysis ... } },
+  { "word": "invalid", "ok": false, "error": "validation failed" },
+  { "word": "happy", "ok": true, "data": { ... } }
 ]
+```
 
+## Performance Testing
 
-## Load test
 ```bash
+# Load test with 200 concurrent requests
 cargo run -p xtask --release -- http://127.0.0.1:8080/v1/word
 ```
 
+## Configuration
 
-## Tuning
-- Prefer `temp 0.3–0.5`, `top_p 0.9`, `min_p 0.05`, `repeat_penalty 1.1`.
-- Increase `n_gpu_layers` on Apple Silicon / CUDA hosts until VRAM hits limits.
-- Keep the system prompt minimal; rely on GBNF for structure.
+Key settings (see `.env.example`):
+- `MODEL_PATH` - Path to your GGUF model file *(required)*
+- `N_GPU_LAYERS` - Number of layers to run on GPU (higher = faster)
+- `TEMP` - Sampling temperature (0.3-0.5 recommended)
+- `N_CTX` - Context window size
 
+## Development
 
-### What you’ll likely tweak next
-
-- Replace the minimal llama sys calls with the exact functions exposed by your `llama-cpp-sys` version (names drift slightly across releases).
-- Consider pinning a specific llama.cpp commit and embedding as a `vendor/llama.cpp` submodule.
-- Add a one-retry path with slightly safer sampling if validation fails.
-- Add Prometheus exporter and a `/metrics` route.
-- Add per-model KV cache warming for the system prompt.
-
-## Features
-- The build always uses the real llama.cpp backend via the `llama-cpp-2` crate.
-
-### Run (real inference)
 ```bash
-cargo run --release -- \
-  --bind-addr 0.0.0.0:8080 \
-  --MODEL_PATH "$MODEL_PATH" \
-  --n-ctx 4096 --n-batch 256 --n-gpu-layers 28
+# Run tests (requires model file)
+cargo test
+
+# Format and lint
+cargo fmt && cargo clippy --all-features -- -D warnings
+
+# Build optimized release
+cargo build --release
 ```
 
-### Tests (real inference)
-Tests always run real inference using a default model path. Override with `MODEL_PATH`.
-Default: `./models/granite/granite-3.3-2b-instruct-Q4_K_M.gguf`
-```bash
-# optional
-export MODEL_PATH=/path/to/model.gguf
-cargo test -- --nocapture
-```
+## Architecture
 
-If you previously built with Ninja as the CMake generator, you may need a clean build to switch to Makefiles:
-```bash
-cargo clean && cargo build
-```
+Built with modern Rust tooling:
+- **Axum** - Fast async web framework
+- **llama-cpp-2** - Safe Rust bindings to llama.cpp
+- **tokio** - Async runtime with multi-threading
+- **GBNF + JSON Schema** - Structured output validation
+
+The service loads grammar constraints and JSON schemas at startup, ensuring consistent and validated linguistic analysis for every request.
