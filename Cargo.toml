@@ -21,15 +21,18 @@ hyper = { version = "1", features = ["http1", "http2", "server"] }
 http = "1"
 # JSON Schema validation
 jsonschema = { version = "0.18", default-features = false, features = ["draft202012"] }
-# llama.cpp FFI bindings (safe wrapper around C API)
-llama-cpp-sys = { version = "0.3", default-features = false, features = ["metal", "cublas"] }
+# async trait for backend abstraction
+async-trait = "0.1"
+# llama.cpp FFI bindings (optional; enable with feature `llama`)
+llama_cpp_sys = { version = "0.3", optional = true, default-features = false }
 # time & metrics
 hdrhistogram = "7"
 metrics = "0.22"
 metrics-exporter-prometheus = "0.14"
 parking_lot = "0.12"
-clap = { version = "4", features = ["derive"] }
+clap = { version = "4", features = ["derive", "env"] }
 dotenvy = "0.15"
+once_cell = "1"
 
 
 [dev-dependencies]
@@ -43,6 +46,13 @@ cc = "1"
 
 [workspace]
 members = ["xtask"]
+
+[features]
+default = ["mock-llama"]
+# Build with the real llama.cpp backend (requires llama.cpp toolchain/libs available)
+llama = ["dep:llama_cpp_sys"]
+# Lightweight mock backend for local builds and CI
+mock-llama = []
 
 
 [profile.release]

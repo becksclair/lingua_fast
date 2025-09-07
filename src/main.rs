@@ -1,5 +1,5 @@
 mod api; mod config; mod model; mod validate; mod util;
-use axum::{Router};
+use axum::Router;
 use config::Config;
 use dotenvy::dotenv;
 use tracing_subscriber::{fmt, EnvFilter};
@@ -7,6 +7,7 @@ use crate::model::llama::LlamaBackend;
 use crate::model::{InferParams};
 use crate::validate::Validator;
 use std::net::SocketAddr;
+use std::sync::Arc;
 
 
 #[tokio::main(flavor = "multi_thread")]
@@ -21,8 +22,8 @@ fmt().with_env_filter(filter).init();
 
 
 // load schema & validator
-let schema: serde_json::Value = serde_json::from_str(include_str!("../schema/word_contract.schema.json"))?;
-let validator = Validator::new(&schema)?;
+let schema_src: &str = include_str!("../schema/word_contract.schema.json");
+let validator = Arc::new(Validator::new(schema_src)?);
 
 
 // llama backend

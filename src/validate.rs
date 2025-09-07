@@ -1,19 +1,15 @@
 use jsonschema::{Draft, JSONSchema};
-use serde_json::{json, Value};
-use anyhow::{Result, bail};
+use serde_json::Value;
+use anyhow::{Result, bail, anyhow};
+use once_cell::sync::Lazy;
 use std::collections::HashSet;
 
 
-pub struct Validator {
-compiled: JSONSchema,
-}
+pub struct Validator;
 
 
 impl Validator {
-pub fn new(schema: &serde_json::Value) -> Result<Self> {
-let compiled = JSONSchema::options().with_draft(Draft::Draft202012).compile(schema)?;
-Ok(Self { compiled })
-}
+pub fn new(_schema_src: &str) -> Result<Self> { Ok(Self) }
 
 
 pub fn validate_and_fix(&self, mut v: Value, surface_word: &str) -> Result<Value> {
@@ -49,11 +45,15 @@ if uniq.insert(lc.clone()) { out.push(Value::String(lc)); }
 }
 
 
-let result = self.compiled.validate(&v);
-if let Err(errors) = result {
-let first = errors.into_iter().next().unwrap();
-bail!("schema error at {}: {}", first.instance_path, first.error);
-}
-Ok(v)
+    static SCHEMA_VALUE: Lazy<Value> = Lazy::new(|| {
+        serde_json::from_str(include_str!("../schema/word_contract.schema.json"))
+            .expect("valid schema JSON")
+    });
+    let compiled: JSONSchema = JSONSchema::options().with_draft(Draft::Draft202012).compile(&SCHEMA_VALUE)?;
+    compiled.validate(&v).map_err(|mut errors| {
+        let first = errors.next().unwrap();
+        anyhow!("schema error at {}: {:?}", first.instance_path, first.kind)
+    })?;
+    Ok(v)
 }
 }

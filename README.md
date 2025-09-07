@@ -43,7 +43,7 @@ curl -s http://127.0.0.1:8080/v1/word -X POST \
 
 ## Load test
 ```bash
-cargo run -p xtask --release --bin loadtest -- http://127.0.0.1:8080/v1/word
+cargo run -p xtask --release -- http://127.0.0.1:8080/v1/word
 ```
 
 
@@ -60,3 +60,7 @@ cargo run -p xtask --release --bin loadtest -- http://127.0.0.1:8080/v1/word
 - Add a one-retry path with slightly safer sampling if validation fails.
 - Add Prometheus exporter and a `/metrics` route.
 - Add per-model KV cache warming for the system prompt.
+
+## Features
+- By default, the build uses a lightweight mock backend that returns schema-valid JSON without calling llama.cpp. This keeps builds fast and CI-friendly.
+- To enable the real llama.cpp backend, wire up `llama_cpp_sys` and implement the `llama` feature in `src/model/llama.rs` (currently a placeholder).
